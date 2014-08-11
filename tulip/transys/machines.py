@@ -293,7 +293,7 @@ class FiniteStateMachine(LabeledDiGraph):
         raise NotImplementedError
         
     def async_product(self):
-        raise NotImplementedError
+        raise NotImplementedError      
 
 class FSM(FiniteStateMachine):
     """Alias for Finite-state Machine."""
@@ -519,7 +519,7 @@ class MealyMachine(FiniteStateMachine):
             if out_port_name in masks:
                 mask_func = masks[out_port_name]
                 self._transition_dot_mask[out_port_name] = mask_func
-    
+
     def simulate(
             self, inputs_sequence='manual', iterations=100,
             current_state=None

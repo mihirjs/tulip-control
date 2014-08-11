@@ -23,6 +23,9 @@ NO, TuLiP 1.x discretization
 # @import_section@
 import sys
 import numpy as np
+import time
+import logging
+logging.basicConfig()
 
 from tulip import spec, synth, hybrid
 from polytope import box2poly
@@ -32,84 +35,205 @@ from tulip.abstract import prop2part, discretize
 visualize = False
 from tulip.abstract.plot import plot_partition
 
-# @dynamics_section@
-# Problem parameters
-input_bound = 1.0
-uncertainty = 0.01
+dndtimer =[0,0,0,0,0]
+n=1;
+disturbtimer=[0,0,0,0,0]
+N=15
+mcv=0.1
+cons=False
+mnp=5
+tl=1
 
-# Continuous state space
-cont_state_space = box2poly([[0., 3.], [0., 2.]])
+for c in range (0,n):
+    start=time.clock()
+    # @dynamics_section@
+    # Problem parameters
+    input_bound = 1.0
+    uncertainty = 0.01
 
-# Continuous dynamics
-A = np.array([[1.0, 0.], [ 0., 1.0]])
-B = np.array([[0.1, 0.], [ 0., 0.1]])
-E = np.array([[1,0], [0,1]])
+    # Continuous state space
+    cont_state_space = box2poly([[0., 3.], [0., 2.]])
 
-# Available control, possible disturbances
-U = input_bound *np.array([[-1., 1.], [-1., 1.]])
-W = uncertainty *np.array([[-1., 1.], [-1., 1.]])
+    # Continuous dynamics
+    A = np.array([[1.0, 0.], [ 0., 1.0]])
+    B = np.array([[0.1, 0.], [ 0., 0.1]])
+    E = np.array([[1,0], [0,1]])
 
-# Convert to polyhedral representation
-U = box2poly(U)
-W = box2poly(W)
+    # Available control, possible disturbances
+    U = input_bound *np.array([[-1., 1.], [-1., 1.]])
+    W = uncertainty *np.array([[-1., 1.], [-1., 1.]])
 
-# Construct the LTI system describing the dynamics
-sys_dyn = hybrid.LtiSysDyn(A, B, E, None, U, W, cont_state_space)
-# @dynamics_section_end@
+    # Convert to polyhedral representation
+    U = box2poly(U)
+    W = box2poly(W)
 
-# @partition_section@
-# Define atomic propositions for relevant regions of state space
-cont_props = {}
-cont_props['home'] = box2poly([[0., 1.], [0., 1.]])
-cont_props['lot'] = box2poly([[2., 3.], [1., 2.]])
+    # Construct the LTI system describing the dynamics
+    #sys_dyn = hybrid.LtiSysDyn(A, B, None, None, U, None, cont_state_space)
+    sys_dyn = hybrid.LtiSysDyn(A, B, E, None, U, W, cont_state_space)
+    # @dynamics_section_end@
 
-# Compute the proposition preserving partition of the continuous state space
-cont_partition = prop2part(cont_state_space, cont_props)
-plot_partition(cont_partition, show=visualize)
-# @partition_section_end@
+    # @partition_section@
+    # Define atomic propositions for relevant regions of state space
+    cont_props = {}
+    cont_props['home'] = box2poly([[0., 1.], [0., 1.]])
+    cont_props['lot'] = box2poly([[2., 3.], [1., 2.]])
 
-# @discretize_section@
-# Given dynamics & proposition-preserving partition, find feasible transitions
-disc_dynamics = discretize(
-    cont_partition, sys_dyn, closed_loop=True,
-    N=8, min_cell_volume=0.1, plotit=visualize
-)
-# @discretize_section_end@
+    # Compute the proposition preserving partition of the continuous state space
+    cont_partition = prop2part(cont_state_space, cont_props)
+    plot_partition(cont_partition, show=True)
+    # @partition_section_end@
 
-"""Visualize transitions in continuous domain (optional)"""
-plot_partition(disc_dynamics.ppp, disc_dynamics.ts,
-               disc_dynamics.ppp2ts, show=visualize)
+    # @discretize_section@
+    # Given dynamics & proposition-preserving partition, find feasible transitions
+    ddst=time.clock();
+    disc_dynamics = discretize( 
+        cont_partition, sys_dyn, N=N, 
+        min_cell_volume=mcv,  closed_loop=True, conservative=cons,
+        max_num_poly=mnp, trans_length=tl, plotit=True)
+        #plotit=visualize
+    dden=time.clock();
+    dddur=dden-ddst
+    # @discretize_section_end@
 
-"""Specifications"""
-# Environment variables and assumptions
-env_vars = {'park'}
-env_init = set()                # empty set
-env_prog = '!park'
-env_safe = set()                # empty set
+    """Visualize transitions in continuous domain (optional)"""
+    #visualize=True
+    plot_partition(disc_dynamics.ppp, disc_dynamics.ts,
+                   disc_dynamics.ppp2ts, show=False)
 
-# System variables and requirements
-sys_vars = {'X0reach'}
-sys_init = {'X0reach'}          
-sys_prog = {'home'}               # []<>home
-sys_safe = {'(X(X0reach) <-> lot) || (X0reach && !park)'}
-sys_prog |= {'X0reach'}
+    """Specifications"""
+    # Environment variables and assumptions
+    env_vars = {'park'}
+    env_init = set()                # empty set
+    env_prog = '!park'
+    env_safe = set()                # empty set
 
-# Create the specification
-specs = spec.GRSpec(env_vars, sys_vars, env_init, sys_init,
-                    env_safe, sys_safe, env_prog, sys_prog)
+    # System variables and requirements
+    sys_vars = {'X0reach'}
+    sys_init = {'X0reach'}          
+    sys_prog = {'home'}               # []<>home
+    sys_safe = {'(X(X0reach) <-> lot) || (X0reach && !park)'}
+    sys_prog |= {'X0reach'}
 
-# @synthesize_section@
-"""Synthesize"""
-ctrl = synth.synthesize('gr1c', specs,
-                        sys=disc_dynamics.ts, ignore_sys_init=True)
+    # Create the specification
+    specs = spec.GRSpec(env_vars, sys_vars, env_init, sys_init,
+                        env_safe, sys_safe, env_prog, sys_prog)
 
-# Unrealizable spec ?
-if ctrl is None:
-    sys.exit()
+    # @synthesize_section@
+    """Synthesize"""
+    ctrl = synth.synthesize('jtlv', specs,
+                            sys=disc_dynamics.ts, ignore_sys_init=True)
 
-# Generate a graphical representation of the controller for viewing
-if not ctrl.save('continuous.png'):
-    print(ctrl)
-# @synthesize_section_end@
+    # Unrealizable spec ?
+    if ctrl is None:
+        sys.exit()
+    end = time.clock()
+    totdur=end-start
+    # Generate a graphical representation of the controller for viewing
+    if not ctrl.save('continuous.png'):
+        print(ctrl)
+    # @synthesize_section_end@
+    print "Discretization of DND Partition Time: %.6f"%dddur
+    #print "Total Time: %.6f"%totdur
+    # Simulation
+    dndtimer[c]=dddur
+    
+# for c in range (0,n):
+#     start=time.clock()
+#     # @dynamics_section@
+#     # Problem parameters
+#     input_bound = 1.0
+#     uncertainty = 0.01
 
-# Simulation
+#     # Continuous state space
+#     cont_state_space = box2poly([[0., 3.], [0., 2.]])
+
+#     # Continuous dynamics
+#     A = np.array([[1.0, 0.], [ 0., 1.0]])
+#     B = np.array([[0.1, 0.], [ 0., 0.1]])
+#     E = np.array([[1,0], [0,1]])
+
+#     # Available control, possible disturbances
+#     U = input_bound *np.array([[-1., 1.], [-1., 1.]])
+#     W = uncertainty *np.array([[-1., 1.], [-1., 1.]])
+
+#     # Convert to polyhedral representation
+#     U = box2poly(U)
+#     W = box2poly(W)
+
+#     # Construct the LTI system describing the dynamics
+#     #sys_dyn = hybrid.LtiSysDyn(A, B, None, None, U, None, cont_state_space)
+#     sys_dyn = hybrid.LtiSysDyn(A, B, E, None, U, W, cont_state_space)
+#     # @dynamics_section_end@
+
+#     # @partition_section@
+#     # Define atomic propositions for relevant regions of state space
+#     cont_props = {}
+#     cont_props['home'] = box2poly([[0., 1.], [0., 1.]])
+#     cont_props['lot'] = box2poly([[2., 3.], [1., 2.]])
+
+#     # Compute the proposition preserving partition of the continuous state space
+#     cont_partition = prop2part(cont_state_space, cont_props)
+#     plot_partition(cont_partition, show=False)
+#     # @partition_section_end@
+
+#     # @discretize_section@
+#     # Given dynamics & proposition-preserving partition, find feasible transitions
+#     ddst=time.clock();
+#     disc_dynamics = discretize( 
+#         cont_partition, sys_dyn, N=N, 
+#         min_cell_volume=mcv,  closed_loop=True, conservative=cons,
+#         max_num_poly=mnp, trans_length=tl, plotit=False)
+#         #plotit=visualize
+#     dden=time.clock();
+#     dddur=dden-ddst
+#     # @discretize_section_end@
+
+#     """Visualize transitions in continuous domain (optional)"""
+#     #visualize=True
+#     plot_partition(disc_dynamics.ppp, disc_dynamics.ts,
+#                    disc_dynamics.ppp2ts, show=visualize)
+
+#     """Specifications"""
+#     # Environment variables and assumptions
+#     env_vars = {'park'}
+#     env_init = set()                # empty set
+#     env_prog = '!park'
+#     env_safe = set()                # empty set
+
+#     # System variables and requirements
+#     sys_vars = {'X0reach'}
+#     sys_init = {'X0reach'}          
+#     sys_prog = {'home'}               # []<>home
+#     sys_safe = {'(X(X0reach) <-> lot) || (X0reach && !park)'}
+#     sys_prog |= {'X0reach'}
+
+#     # Create the specification
+#     specs = spec.GRSpec(env_vars, sys_vars, env_init, sys_init,
+#                         env_safe, sys_safe, env_prog, sys_prog)
+
+#     # @synthesize_section@
+#     """Synthesize"""
+#     ctrl = synth.synthesize('jtlv', specs,
+#                             sys=disc_dynamics.ts, ignore_sys_init=True)
+
+#     # Unrealizable spec ?
+#     if ctrl is None:
+#         sys.exit()
+#     end = time.clock()
+#     totdur=end-start
+#     # Generate a graphical representation of the controller for viewing
+#     if not ctrl.save('continuous.png'):
+#         print(ctrl)
+#     # @synthesize_section_end@
+#     print "Discretization of Disturbed Partition Time: %.6f"%dddur
+#     #print "Total Time: %.6f"%totdur
+#     # Simulation
+#     disturbtimer[c]=dddur
+    
+# for i in range (0,n):
+#     print "Discretization of DND Partition Time: %.6f"%dndtimer[i]
+
+# for i in range (0,n):
+#     print "Discretization of Disturbing Partition Time: %.6f"%disturbtimer[i]
+
+

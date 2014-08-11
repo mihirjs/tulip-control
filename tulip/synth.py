@@ -510,6 +510,11 @@ def env_to_spec(
             env, ignore_initial, bool_states,
             action_vars, bool_actions
         )
+    elif isinstance(env, transys.AugmentedOpenFiniteTransitionSystem):
+        return env_augmented_open_fts2spec(
+            env,ignore_initial,bool_states,
+            action_vars, bool_actions
+        )
     else:
         raise TypeError('synth.env_to_spec does not support ' +
             str(type(env)) +'. Use FTS or OpenFTS.')
@@ -725,6 +730,91 @@ def env_open_fts2spec(
         sys_vars=sys_vars, env_vars=env_vars,
         env_init=env_init, sys_init=sys_init,
         env_safety=env_trans, sys_safety=sys_trans
+    )
+
+def env_augmented_open_fts2spec(
+    aofts, ignore_initial=False, bool_states=False,
+    action_vars=None, bool_actions=False
+):
+    assert(isinstance(aofts, transys.AugmentedOpenFiniteTransitionSystem))
+    
+    aps = aofts.aps
+    eqs = aofts.equilibrium_propositions
+    prog_map=aofts.progress_map
+    states = aofts.states
+    trans = aofts.transitions
+    
+    sys_init = []
+    sys_trans = []
+    env_init = []
+    env_trans = []
+    
+    # since APs are tied to env states, let them be env variables
+    env_vars = {ap:'boolean' for ap in aps}
+    env_vars.update({eq:'boolean' for eq in eqs})
+    sys_vars = dict()
+    
+    actions = aofts.actions
+    
+    sys_action_ids = dict()
+    env_action_ids = dict()
+    
+    for action_type, codomain in actions.iteritems():
+        if 'sys' in action_type:
+            action_ids = create_actions(
+                codomain, sys_vars, sys_trans, sys_init,
+                action_type, bool_actions, aofts.sys_actions_must
+            )
+            sys_action_ids[action_type] = action_ids
+        elif 'env' in action_type:
+            action_ids = create_actions(
+                codomain, env_vars, env_trans, env_init,
+                action_type, bool_actions, aofts.env_actions_must
+            )
+            env_action_ids[action_type] = action_ids
+    
+    # some duplication here, because we don't know
+    # whether the user will provide a system TS as well
+    # and whether that TS will contain all the system actions
+    # defined in the environment TS
+    
+    statevar = 'eloc'
+    state_ids = create_states(states, env_vars, env_trans,
+                              statevar, bool_states)
+    
+    env_init += sys_init_from_ts(states, state_ids, aps, ignore_initial)
+    
+    env_trans += env_trans_from_env_ts(
+        states, state_ids, trans,
+        env_action_ids=env_action_ids, sys_action_ids=sys_action_ids
+    )
+    tmp_init, tmp_trans = ap_trans_from_ts(states, state_ids, aps)
+    env_init += tmp_init
+    env_trans += tmp_trans
+
+    env_prog=set()
+    if 'sys_actions' in sys_vars:
+        # then solver used is gr1c
+        for eq in eqs:
+            temp=eq+' || !(sys_actions = '
+            for act in aofts.sys_actions:
+                if (act in eq):
+                    temp=temp+act+')'
+            env_prog|={temp}
+    else:
+        #assuming jtlv
+        for eq in eqs:
+            temp=eq+' || !'
+            for act in aofts.sys_actions:
+                if (act in eq):
+                    temp=temp+act
+            env_prog|={temp}
+            
+    return GRSpec(
+        sys_vars=sys_vars, env_vars=env_vars,
+        env_init=env_init, sys_init=sys_init,
+        env_safety=env_trans, sys_safety=sys_trans,
+        env_prog=env_prog
     )
 
 def sys_init_from_ts(states, state_ids, aps, ignore_initial=False):
@@ -1070,7 +1160,7 @@ def synthesize(
     option, specs, env=None, sys=None,
     ignore_env_init=False, ignore_sys_init=False,
     bool_states=False, action_vars=None,
-    bool_actions=False
+    bool_actions=False, trim_aut=True
 ):
     """Function to call the appropriate synthesis tool on the spec.
 
@@ -1139,6 +1229,10 @@ def synthesize(
     
     @param bool_actions: model actions using bool variables
     @type bool_actions: bool
+
+    @param trim_aut: if True, 
+        then remove all states without outgoing transitions
+    @type trim_aut: bool
     
     @return: If spec is realizable,
         then return a Mealy machine implementing the strategy.
@@ -1173,7 +1267,10 @@ def synthesize(
     # can be done by calling a dedicated other function, not this
     if not isinstance(ctrl, transys.MealyMachine):
         return None
-    
+
+    if trim_aut:
+        ctrl.trim_dead_states()
+
     return ctrl
 
 def is_realizable(

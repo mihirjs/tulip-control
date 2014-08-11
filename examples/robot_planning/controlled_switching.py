@@ -131,8 +131,8 @@ env_safe = set()                # empty set
 #! NOTE: maybe "synthesize" should infer the atomic proposition from the 
 # transition system? Or, we can declare the mode variable, and the values
 # of the mode variable are read from the transition system.
-sys_vars = {'X0reach'}
-sys_init = {'X0reach', 'sys_actions = right'}
+sys_vars = {'X0reach'}#,'sys_actions'}
+sys_init = {'X0reach'}#, 'sys_actions = right'}
 sys_prog = {'home'}               # []<>home
 sys_safe = {'next(X0reach) <-> lot || (X0reach && !park)'}
 sys_prog |= {'X0reach'}
@@ -146,7 +146,7 @@ specs = spec.GRSpec(env_vars, sys_vars, env_init, sys_init,
 # At this point we can synthesize the controller using one of the available
 # methods.  Here we make use of JTLV.
 #
-ctrl = synth.synthesize('gr1c', specs, sys=sys_sws)
+ctrl = synth.synthesize('jtlv', specs, sys=sys_sws)
 
 # Generate a graphical representation of the controller for viewing
 if not ctrl.save('controlled_switching.png'):

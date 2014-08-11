@@ -26,7 +26,7 @@ indicates that the robot should move to cell X0.
 
 The system specification in its simplest form is given by
 
-  []<>park -> []<>X5 && [](park -> <>X0)
+  []<>!park -> []<>X5 && [](park -> <>X0)
 
 We must convert this specification into GR(1) form:
 
@@ -51,7 +51,7 @@ env_vars = {'park'}
 env_init = set()                # empty set
 env_safe = set()                # empty set
 env_prog = '!park'              # []<>(!park)
-
+ 
 #
 # System dynamics
 #

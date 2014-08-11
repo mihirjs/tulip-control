@@ -99,13 +99,21 @@ disc_params = {}
 for mode in modes:
     disc_params[mode] = {'N':N, 'trans_length':trans_len}
 
-swab = abstract.multiproc_discretize_switched(
+# swab = abstract.multiproc_discretize_switched(
+#     ppp, switched_dynamics, disc_params,
+#     plot=True, show_ts=True
+# )
+# print(swab)
+
+#ax = sys_ts.ts.plot()
+end=time.time()
+elapsed = (end - start)
+
+swab2 = abstract.discretize_switched(
     ppp, switched_dynamics, disc_params,
     plot=True, show_ts=True
 )
-print(swab)
-
-#ax = sys_ts.ts.plot()
-
-elapsed = (time.time() - start)
-print('Discretization lasted: ' + str(elapsed))
+print(swab2)
+end2=time.time()
+print('MultiiProcDiscretization lasted: ' + str(elapsed))
+print('Discretization lasted: ' + str(end2-end))
