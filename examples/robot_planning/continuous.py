@@ -20,8 +20,10 @@ NO, TuLiP 1.x discretization
 # the tutorial that is part of the users manual.  Comments containing
 # strings of the form @label@ are used for this purpose.
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # @import_section@
-import sys
 import numpy as np
 import time
 import logging
@@ -30,10 +32,10 @@ logging.basicConfig()
 from tulip import spec, synth, hybrid
 from polytope import box2poly
 from tulip.abstract import prop2part, discretize
+from tulip.abstract.plot import plot_partition
 # @import_section_end@
 
-visualize = False
-from tulip.abstract.plot import plot_partition
+show = False
 
 # @dynamics_section@
 # Problem parameters
@@ -68,20 +70,20 @@ cont_props['lot'] = box2poly([[2., 3.], [1., 2.]])
 
 # Compute the proposition preserving partition of the continuous state space
 cont_partition = prop2part(cont_state_space, cont_props)
-plot_partition(cont_partition, show=visualize)
+plot_partition(cont_partition) if show else None
 # @partition_section_end@
 
 # @discretize_section@
 # Given dynamics & proposition-preserving partition, find feasible transitions
 disc_dynamics = discretize(
     cont_partition, sys_dyn, closed_loop=True,
-    N=8, min_cell_volume=0.1, plotit=visualize
+    N=8, min_cell_volume=0.1, plotit=show
 )
 # @discretize_section_end@
 
 """Visualize transitions in continuous domain (optional)"""
 plot_partition(disc_dynamics.ppp, disc_dynamics.ts,
-               disc_dynamics.ppp2ts, show=visualize)
+               disc_dynamics.ppp2ts) if show else None
 
 """Specifications"""
 # Environment variables and assumptions
